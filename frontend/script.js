@@ -240,7 +240,7 @@ class FileFlow {
             message: message
         });
 
-        this.addMessage(this.username, message, new Date(), true);
+    
         this.messageInput.value = '';
     }
 
