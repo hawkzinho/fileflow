@@ -231,21 +231,17 @@ class FileFlow {
     }
 
     sendMessage() {
-    const message = this.messageInput.value.trim();
-    if (!message) return;
+        const message = this.messageInput.value.trim();
+        if (!message) return;
 
-    this.socket.emit('send-message', {
-        roomId: this.currentRoom,
-        username: this.username,
-        message: message
-    });
+        this.socket.emit('send-message', {
+            roomId: this.currentRoom,
+            username: this.username,
+            message: message
+        });
 
-    // ✅ CORREÇÃO: Adiciona como mensagem de outro usuário (não-own)
-    // Isso evita duplicação quando a mensagem voltar do servidor
-    this.addMessage(this.username, message, new Date(), false);
-
-    this.messageInput.value = '';
-}
+        this.messageInput.value = '';
+    }
 
     addMessage(username, message, timestamp, isOwn = false) {
         const messageDiv = document.createElement('div');
