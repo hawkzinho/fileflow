@@ -305,12 +305,13 @@ app.get('/download/:filename', (req, res) => {
   }
 });
 
-// Health check
+// Health check - ROTA ADICIONADA
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
     database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    port: process.env.PORT || 3000
   });
 });
 
