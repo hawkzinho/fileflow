@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FileFlow - Chat e Compartilhamento Ilimitado</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <h1>⚡ FileFlow</h1>
+                <p>Compartilhe arquivos pesados sem limites</p>
+            </div>
+            <div class="room-info">
+                <div id="roomStatus">Sala: <span id="currentRoom">Não conectado</span></div>
+                <div id="userCount">Usuários: 0</div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Painel de Entrada -->
+            <div id="joinPanel" class="panel">
+                <h2>Entrar no FileFlow</h2>
+                <div class="input-group">
+                    <input type="text" id="usernameInput" placeholder="Seu nome" value="João">
+                    <input type="text" id="roomInput" placeholder="ID da Sala" value="SALA123">
+                    <button id="joinBtn">Entrar na Sala</button>
+                </div>
+                <div class="room-actions">
+                    <button id="createRoomBtn">Criar Nova Sala</button>
+                    <div id="roomLink" class="hidden">
+                        <p>Compartilhe este link com seus amigos:</p>
+                        <input type="text" id="inviteLink" readonly>
+                        <button id="copyLinkBtn">Copiar Link</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aplicação Principal (inicialmente oculta) -->
+            <div id="app" class="hidden">
+                <div class="sidebar">
+                    <div class="users-panel">
+                        <h3>👥 Usuários Online</h3>
+                        <ul id="usersList"></ul>
+                    </div>
+                    
+                    <div class="upload-panel">
+                        <h3>📁 Compartilhar Arquivo</h3>
+                        <div id="uploadArea" class="upload-area">
+                            <span>📁</span>
+                            <p>Arraste arquivos aqui ou clique para selecionar</p>
+                            <input type="file" id="fileInput" multiple style="display: none;">
+                        </div>
+                        <div id="fileList" class="file-list"></div>
+                    </div>
+                </div>
+
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <h3>💬 Chat da Sala</h3>
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message system-message">
+                            Bem-vindo ao FileFlow! Compartilhe arquivos e converse com seus amigos.
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input">
+                        <input type="text" id="messageInput" placeholder="Digite sua mensagem...">
+                        <button id="sendMessageBtn">Enviar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

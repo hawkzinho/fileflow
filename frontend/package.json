@@ -1,0 +1,9 @@
+{
+  "name": "fileflow-frontend",
+  "version": "1.0.0",
+  "description": "Frontend para compartilhamento de arquivos",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve ."
+  }
+}
