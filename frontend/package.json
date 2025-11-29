@@ -1,9 +1,13 @@
 {
   "name": "fileflow-frontend",
-  "version": "1.0.0",
-  "description": "Frontend para compartilhamento de arquivos",
-  "main": "index.html",
+  "version": "2.0.0",
+  "description": "Frontend do FileFlow - Sistema completo de compartilhamento",
+  "type": "module",
   "scripts": {
-    "start": "npx serve ."
+    "dev": "live-server --port=3000 --entry-file=index.html",
+    "build": "echo 'No build process necessário'"
+  },
+  "devDependencies": {
+    "live-server": "^1.2.2"
   }
 }
