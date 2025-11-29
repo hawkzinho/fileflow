@@ -10,7 +10,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // Criar pastas
 const storagePath = path.join(__dirname, 'storage');
@@ -19,7 +19,7 @@ const uploadsPath = path.join(storagePath, 'uploads');
 if (!fs.existsSync(storagePath)) fs.mkdirSync(storagePath, { recursive: true });
 if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
 
-// Middlewares CRÍTICOS primeiro
+// Middlewares
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -30,73 +30,62 @@ app.use(session({
     cookie: { secure: false }
 }));
 
-// Servir arquivos estáticos - CORRIGIDO
-app.use('/css', express.static(path.join(__dirname, '../frontend')));
-app.use('/js', express.static(path.join(__dirname, '../frontend')));
+// Arquivos estáticos
 app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/storage', express.static(uploadsPath));
 
-// Rota principal - SEMPRE primeiro
+// ✅ AGORA IMPORTE TODOS OS MODULES REAIS
+const db = require('./models/Database');
+const authRoutes = require('./routes/auth');
+const friendRoutes = require('./routes/friends'); 
+const roomRoutes = require('./routes/rooms');
+const fileRoutes = require('./routes/files');
+const authMiddleware = require('./middleware/auth');
+
+// ✅ USE AS ROTAS REAIS
+app.use('/api/auth', authRoutes);
+app.use('/api/friends', authMiddleware, friendRoutes);
+app.use('/api/rooms', authMiddleware, roomRoutes);
+app.use('/api/files', authMiddleware, fileRoutes);
+
+// WebSocket real
+const connectedClients = new Map();
+
+wss.on('connection', (ws) => {
+    console.log('🔗 WebSocket conectado');
+    
+    ws.on('message', async (data) => {
+        try {
+            const message = JSON.parse(data);
+            // Aqui vai a lógica real do WebSocket
+            ws.send(JSON.stringify({ type: 'echo', message: 'Conectado!' }));
+        } catch (error) {
+            console.error('❌ Erro WebSocket:', error);
+        }
+    });
+});
+
+// Rotas básicas
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'healthy', message: 'Backend REAL funcionando!' });
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// DEMONSTRAÇÃO: Rotas simples de API
-app.post('/api/auth/login', (req, res) => {
-    res.json({ 
-        success: true, 
-        user: { id: 1, name: 'Admin', email: 'admin@fileflow.com', avatar: 'A' } 
-    });
-});
+// Iniciar com Database
+async function startServer() {
+    try {
+        await db.connect();
+        
+        server.listen(PORT, () => {
+            console.log('🚀 FILEFLOW 2.0 - BACKEND REAL');
+            console.log(`📁 http://localhost:${PORT}`);
+        });
+    } catch (error) {
+        console.error('❌ Erro ao iniciar:', error);
+    }
+}
 
-app.get('/api/files', (req, res) => {
-    res.json({ success: true, files: [] });
-});
-
-app.get('/api/rooms', (req, res) => {
-    res.json({ success: true, rooms: [] });
-});
-
-app.get('/api/friends', (req, res) => {
-    res.json({ success: true, friends: [] });
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: 'healthy',
-        database: 'connected',
-        websockets: wss.clients.size,
-        timestamp: new Date().toISOString(),
-        message: '🚀 FileFlow API está funcionando perfeitamente!'
-    });
-});
-
-app.get('/api/info', (req, res) => {
-    res.json({
-        name: 'FileFlow',
-        version: '2.0.0',
-        description: 'Sistema completo de compartilhamento'
-    });
-});
-
-// WebSocket simples
-wss.on('connection', (ws) => {
-    console.log('🔗 WebSocket conectado');
-    ws.send(JSON.stringify({ type: 'connected', message: 'Bem-vindo!' }));
-});
-
-// Iniciar servidor
-server.listen(PORT, () => {
-    console.log('='.repeat(50));
-    console.log('🚀 FILEFLOW 2.0 - FRONTEND FIX');
-    console.log('='.repeat(50));
-    console.log(`📁 Frontend: http://localhost:${PORT}`);
-    console.log(`🔗 API: http://localhost:${PORT}/api/health`);
-    console.log('='.repeat(50));
-});
-
-// Error handling
-process.on('uncaughtException', (error) => {
-    console.error('❌ Erro:', error.message);
-});
+startServer();
