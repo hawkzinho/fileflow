@@ -1,4 +1,4 @@
-// FileFlow Frontend - Sistema Completo
+// FileFlow Frontend - Sistema Completo Corrigido
 class FileFlowApp {
     constructor() {
         this.currentUser = null;
@@ -63,20 +63,14 @@ class FileFlowApp {
             });
         });
 
-        // File Events
-        document.getElementById('uploadBtn').addEventListener('click', () => {
-            document.getElementById('fileInput').click();
+        // File Events - REMOVIDO UPLOAD FORA DE SALAS
+        document.getElementById('uploadBtn')?.addEventListener('click', () => {
+            this.showNotification('Selecione uma sala para compartilhar arquivos', 'info');
         });
 
-        document.getElementById('uploadArea').addEventListener('click', () => {
-            document.getElementById('fileInput').click();
+        document.getElementById('uploadArea')?.addEventListener('click', () => {
+            this.showNotification('Entre em uma sala para compartilhar arquivos', 'info');
         });
-
-        document.getElementById('fileInput').addEventListener('change', (e) => {
-            this.handleFileUpload(e.target.files);
-        });
-
-        this.setupDragAndDrop();
 
         // Room Events
         document.getElementById('createRoomBtn').addEventListener('click', () => {
@@ -150,11 +144,10 @@ class FileFlowApp {
             });
         });
 
-        // View Options
-        document.querySelectorAll('.view-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.switchView(btn.dataset.view);
-            });
+        // Room Invite Form
+        document.getElementById('roomInviteForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.sendRoomInvite();
         });
     }
 
@@ -214,8 +207,6 @@ class FileFlowApp {
     }
 
     checkAuthStatus() {
-        // Simples verificação baseada em currentUser
-        // Em produção, verificar token no localStorage
         if (this.currentUser) {
             this.showMainApp();
         } else {
@@ -248,19 +239,16 @@ class FileFlowApp {
     }
 
     showSection(sectionName) {
-        // Update navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.classList.remove('active');
         });
         document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
 
-        // Show section
         document.querySelectorAll('.content-section').forEach(section => {
             section.classList.remove('active');
         });
         document.getElementById(`${sectionName}Section`).classList.add('active');
 
-        // Load section data
         switch(sectionName) {
             case 'files':
                 this.loadUserFiles();
@@ -295,69 +283,7 @@ class FileFlowApp {
         }
     }
 
-    switchView(viewType) {
-        document.querySelectorAll('.view-btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        document.querySelector(`[data-view="${viewType}"]`).classList.add('active');
-
-        const filesGrid = document.getElementById('filesGrid');
-        filesGrid.className = `files-${viewType}`;
-    }
-
-    // File Management Methods
-    setupDragAndDrop() {
-        const uploadArea = document.getElementById('uploadArea');
-
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            this.handleFileUpload(e.dataTransfer.files);
-        });
-    }
-
-    async handleFileUpload(files) {
-        if (!files.length) return;
-
-        for (let file of files) {
-            if (file.size > 10 * 1024 * 1024) {
-                this.showNotification('Arquivo muito grande. Máximo 10MB.', 'error');
-                continue;
-            }
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            try {
-                const response = await fetch('/api/files/upload', {
-                    method: 'POST',
-                    body: formData,
-                    credentials: 'include'
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    this.showNotification('Arquivo uploadado com sucesso!', 'success');
-                    this.loadUserFiles();
-                } else {
-                    this.showNotification(result.error, 'error');
-                }
-            } catch (error) {
-                this.showNotification('Erro ao fazer upload do arquivo', 'error');
-            }
-        }
-    }
-
+    // File Management Methods - MODIFICADO: Só em salas
     async loadUserFiles() {
         try {
             const response = await this.apiCall('/api/files');
@@ -381,14 +307,11 @@ class FileFlowApp {
                         <h3>${file.original_name}</h3>
                         <div class="file-meta">
                             <span>${this.formatFileSize(file.size)}</span>
-                            <span>${new Date(file.upload_date).toLocaleDateString()}</span>
+                            <span>Sala: ${file.room_id || 'Geral'}</span>
                         </div>
                         <div class="file-actions">
                             <button class="btn btn-primary btn-small" onclick="app.downloadFile(${file.id})">
                                 <i class="fas fa-download"></i>
-                            </button>
-                            <button class="btn btn-danger btn-small" onclick="app.deleteFile(${file.id})">
-                                <i class="fas fa-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -405,18 +328,6 @@ class FileFlowApp {
             this.showNotification('Download iniciado', 'success');
         } catch (error) {
             this.showNotification('Erro ao fazer download', 'error');
-        }
-    }
-
-    async deleteFile(fileId) {
-        if (!confirm('Tem certeza que deseja deletar este arquivo?')) return;
-
-        try {
-            await this.apiCall(`/api/files/${fileId}`, 'DELETE');
-            this.showNotification('Arquivo deletado com sucesso!', 'success');
-            this.loadUserFiles();
-        } catch (error) {
-            this.showNotification('Erro ao deletar arquivo', 'error');
         }
     }
 
@@ -488,14 +399,11 @@ class FileFlowApp {
 
     async enterRoom(roomId) {
         try {
-            // Load room messages
             const messagesResponse = await this.apiCall(`/api/rooms/${roomId}/messages`);
-            const membersResponse = await this.apiCall(`/api/rooms/${roomId}/members`);
             
             this.currentRoom = roomId;
-            this.openChat(roomId, messagesResponse.messages, membersResponse.members);
+            this.openChat(roomId, messagesResponse.messages);
             
-            // Join room via WebSocket
             if (this.ws) {
                 this.ws.send(JSON.stringify({
                     type: 'join_room',
@@ -527,7 +435,7 @@ class FileFlowApp {
         }
     }
 
-    // Friend Management Methods
+    // Friend Management Methods - CORRIGIDAS
     async sendFriendRequest() {
         const email = document.getElementById('friendEmail').value;
 
@@ -538,15 +446,6 @@ class FileFlowApp {
                 this.showNotification('Solicitação de amizade enviada!', 'success');
                 this.closeModal('addFriendModal');
                 document.getElementById('addFriendForm').reset();
-                
-                // Notify via WebSocket
-                if (this.ws) {
-                    this.ws.send(JSON.stringify({
-                        type: 'friend_request',
-                        targetUserId: response.friendship.friend_id,
-                        userId: this.currentUser.id
-                    }));
-                }
             }
         } catch (error) {
             this.showNotification(error.message, 'error');
@@ -563,7 +462,7 @@ class FileFlowApp {
                     <div class="friend-avatar">${friend.avatar}</div>
                     <div class="friend-info">
                         <h4>${friend.name}</h4>
-                        <p>${friend.online ? 'Online' : 'Último visto: ' + new Date(friend.last_seen).toLocaleTimeString()}</p>
+                        <p>${friend.online ? 'Online' : 'Último visto: ' + new Date().toLocaleTimeString()}</p>
                     </div>
                     <div class="friend-status ${friend.online ? '' : 'offline'}"></div>
                     <div class="friend-actions">
@@ -574,7 +473,6 @@ class FileFlowApp {
                 </div>
             `).join('');
 
-            // Update online friends sidebar
             this.updateOnlineFriends(response.friends);
         } catch (error) {
             this.showNotification('Erro ao carregar amigos', 'error');
@@ -586,6 +484,11 @@ class FileFlowApp {
             const response = await this.apiCall('/api/friends/requests/pending');
             
             const requestsList = document.getElementById('requestsList');
+            if (response.requests.length === 0) {
+                requestsList.innerHTML = '<p class="text-center">Nenhuma solicitação pendente</p>';
+                return;
+            }
+
             requestsList.innerHTML = response.requests.map(request => `
                 <div class="request-item">
                     <div class="request-avatar">${request.avatar}</div>
@@ -604,7 +507,7 @@ class FileFlowApp {
                 </div>
             `).join('');
         } catch (error) {
-            this.showNotification('Erro ao carregar solicitações', 'error');
+            console.error('Erro ao carregar solicitações:', error);
         }
     }
 
@@ -672,6 +575,12 @@ class FileFlowApp {
         const onlineCount = document.getElementById('onlineCount');
 
         onlineCount.textContent = onlineFriends.length;
+        
+        if (onlineFriends.length === 0) {
+            onlineList.innerHTML = '<p class="text-center">Nenhum amigo online</p>';
+            return;
+        }
+
         onlineList.innerHTML = onlineFriends.map(friend => `
             <div class="online-item">
                 <div class="online-avatar">${friend.avatar}</div>
@@ -694,7 +603,7 @@ class FileFlowApp {
                 document.getElementById('displayName').value = user.name;
                 document.getElementById('profileAvatar').textContent = user.avatar;
 
-                // Load stats (simulado)
+                // Load stats
                 const filesResponse = await this.apiCall('/api/files');
                 const friendsResponse = await this.apiCall('/api/friends');
                 const roomsResponse = await this.apiCall('/api/rooms');
@@ -722,17 +631,15 @@ class FileFlowApp {
     }
 
     // Chat Methods
-    openChat(roomId, messages, members) {
+    openChat(roomId, messages) {
         const chatContainer = document.getElementById('chatContainer');
         const chatMessages = document.getElementById('chatMessages');
-        const chatRoomName = document.getElementById('chatRoomName');
-        const memberCount = document.getElementById('memberCount');
-
-        // Find room name
-        const roomName = document.querySelector(`[data-room="${roomId}"]`)?.textContent || 'Sala';
         
-        chatRoomName.textContent = roomName;
-        memberCount.textContent = `${members.length} membros`;
+        // Find room name
+        const roomElement = document.querySelector(`[data-room="${roomId}"]`);
+        const roomName = roomElement ? roomElement.textContent : 'Sala ' + roomId;
+        
+        document.getElementById('chatRoomName').textContent = roomName;
         
         // Load messages
         chatMessages.innerHTML = messages.map(message => `
@@ -750,14 +657,6 @@ class FileFlowApp {
     closeChat() {
         document.getElementById('chatContainer').classList.remove('open');
         this.currentRoom = null;
-        
-        if (this.ws) {
-            this.ws.send(JSON.stringify({
-                type: 'leave_room',
-                roomId: this.currentRoom,
-                userId: this.currentUser.id
-            }));
-        }
     }
 
     async sendMessage() {
@@ -766,29 +665,22 @@ class FileFlowApp {
 
         if (!content || !this.currentRoom) return;
 
-        if (this.ws) {
-            this.ws.send(JSON.stringify({
-                type: 'chat_message',
-                roomId: this.currentRoom,
-                userId: this.currentUser.id,
-                content: content
-            }));
+        try {
+            const response = await this.apiCall(`/api/rooms/${this.currentRoom}/messages`, 'POST', { content });
+            
+            if (response.success) {
+                this.addMessageToChat(response.message);
+                input.value = '';
+                this.isTyping = false;
+            }
+        } catch (error) {
+            this.showNotification('Erro ao enviar mensagem', 'error');
         }
-
-        input.value = '';
-        this.isTyping = false;
     }
 
     handleTyping() {
         if (!this.isTyping) {
             this.isTyping = true;
-            if (this.ws && this.currentRoom) {
-                this.ws.send(JSON.stringify({
-                    type: 'typing',
-                    roomId: this.currentRoom,
-                    userId: this.currentUser.id
-                }));
-            }
         }
 
         clearTimeout(this.typingTimer);
@@ -815,79 +707,6 @@ class FileFlowApp {
     scrollChatToBottom() {
         const chatMessages = document.getElementById('chatMessages');
         chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    showTypingIndicator(userName) {
-        const indicator = document.getElementById('typingIndicator');
-        indicator.textContent = `${userName} está digitando...`;
-        
-        setTimeout(() => {
-            indicator.textContent = '';
-        }, 3000);
-    }
-
-    // WebSocket Methods
-    initializeWebSocket() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}`;
-        
-        this.ws = new WebSocket(wsUrl);
-
-        this.ws.onopen = () => {
-            console.log('WebSocket conectado');
-            
-            // Autenticar
-            this.ws.send(JSON.stringify({
-                type: 'authenticate',
-                userId: this.currentUser.id
-            }));
-        };
-
-        this.ws.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            this.handleWebSocketMessage(message);
-        };
-
-        this.ws.onclose = () => {
-            console.log('WebSocket desconectado');
-            setTimeout(() => {
-                this.initializeWebSocket();
-            }, 5000);
-        };
-
-        this.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-    }
-
-    handleWebSocketMessage(message) {
-        switch (message.type) {
-            case 'new_message':
-                if (message.message.room_id === this.currentRoom) {
-                    this.addMessageToChat(message.message);
-                }
-                break;
-
-            case 'user_typing':
-                if (message.roomId === this.currentRoom && message.userId !== this.currentUser.id) {
-                    this.showTypingIndicator(message.userName);
-                }
-                break;
-
-            case 'friend_request':
-                this.showNotification(`${message.fromUserName} enviou uma solicitação de amizade`, 'info');
-                this.loadFriendRequests();
-                break;
-
-            case 'user_online':
-            case 'user_offline':
-                this.loadFriends(); // Refresh friends list to update status
-                break;
-
-            case 'error':
-                this.showNotification(message.error, 'error');
-                break;
-        }
     }
 
     // Utility Methods
@@ -941,12 +760,10 @@ class FileFlowApp {
 
         notifications.appendChild(notification);
 
-        // Auto remove after 5 seconds
         setTimeout(() => {
             notification.remove();
         }, 5000);
 
-        // Close button
         notification.querySelector('.notification-close').addEventListener('click', () => {
             notification.remove();
         });
@@ -983,15 +800,32 @@ class FileFlowApp {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
+
+    // WebSocket simplificado
+    initializeWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        
+        this.ws = new WebSocket(wsUrl);
+
+        this.ws.onopen = () => {
+            console.log('WebSocket conectado');
+            this.ws.send(JSON.stringify({
+                type: 'authenticate',
+                userId: this.currentUser.id
+            }));
+        };
+
+        this.ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            if (message.type === 'new_message' && message.message.room_id === this.currentRoom) {
+                this.addMessageToChat(message.message);
+            }
+        };
+    }
 }
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new FileFlowApp();
-});
-
-// Room Invite Form Handler
-document.getElementById('roomInviteForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    window.app.sendRoomInvite();
 });
