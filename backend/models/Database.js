@@ -1,125 +1,106 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
 class Database {
     constructor() {
-        this.dbPath = path.join(__dirname, '..', 'storage', 'fileflow.db');
-        this.db = null;
+        this.pool = new Pool({
+            connectionString: process.env.DATABASE_URL || 'postgresql://localhost/fileflow',
+            ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+        });
     }
 
     async connect() {
-        return new Promise((resolve, reject) => {
-            this.db = new sqlite3.Database(this.dbPath, (err) => {
-                if (err) {
-                    console.error('❌ Erro ao conectar com SQLite:', err);
-                    reject(err);
-                } else {
-                    console.log('✅ Conectado ao SQLite Database');
-                    this.createTables()
-                        .then(() => resolve(this.db))
-                        .catch(reject);
-                }
-            });
-        });
+        try {
+            await this.pool.query('SELECT 1');
+            console.log('✅ Conectado ao PostgreSQL');
+            await this.createTables();
+            return this.pool;
+        } catch (error) {
+            console.error('❌ Erro ao conectar com PostgreSQL:', error);
+            throw error;
+        }
     }
 
     async createTables() {
         const tables = [
             `CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                email TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                avatar TEXT,
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                avatar VARCHAR(10),
                 online BOOLEAN DEFAULT FALSE,
-                last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
 
             `CREATE TABLE IF NOT EXISTS files (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                filename TEXT NOT NULL,
-                original_name TEXT NOT NULL,
+                id SERIAL PRIMARY KEY,
+                filename VARCHAR(255) NOT NULL,
+                original_name VARCHAR(255) NOT NULL,
                 size INTEGER NOT NULL,
-                mimetype TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                user_id INTEGER NOT NULL,
+                mimetype VARCHAR(100) NOT NULL,
+                file_path VARCHAR(500) NOT NULL,
+                user_id INTEGER REFERENCES users(id),
                 room_id INTEGER,
-                upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                download_count INTEGER DEFAULT 0,
-                FOREIGN KEY (user_id) REFERENCES users (id),
-                FOREIGN KEY (room_id) REFERENCES rooms (id)
+                upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                download_count INTEGER DEFAULT 0
             )`,
 
             `CREATE TABLE IF NOT EXISTS rooms (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
                 description TEXT,
-                owner_id INTEGER NOT NULL,
+                owner_id INTEGER REFERENCES users(id),
                 is_active BOOLEAN DEFAULT TRUE,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (owner_id) REFERENCES users (id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
 
             `CREATE TABLE IF NOT EXISTS room_members (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                room_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                id SERIAL PRIMARY KEY,
+                room_id INTEGER REFERENCES rooms(id),
+                user_id INTEGER REFERENCES users(id),
+                joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 is_admin BOOLEAN DEFAULT FALSE,
-                FOREIGN KEY (room_id) REFERENCES rooms (id),
-                FOREIGN KEY (user_id) REFERENCES users (id),
                 UNIQUE(room_id, user_id)
             )`,
 
             `CREATE TABLE IF NOT EXISTS friendships (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                friend_id INTEGER NOT NULL,
-                status TEXT DEFAULT 'pending',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id),
-                FOREIGN KEY (friend_id) REFERENCES users (id),
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                friend_id INTEGER REFERENCES users(id),
+                status VARCHAR(20) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(user_id, friend_id)
             )`,
 
             `CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                room_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
+                id SERIAL PRIMARY KEY,
+                room_id INTEGER REFERENCES rooms(id),
+                user_id INTEGER REFERENCES users(id),
                 content TEXT NOT NULL,
-                message_type TEXT DEFAULT 'text',
-                file_id INTEGER,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (room_id) REFERENCES rooms (id),
-                FOREIGN KEY (user_id) REFERENCES users (id),
-                FOREIGN KEY (file_id) REFERENCES files (id)
+                message_type VARCHAR(20) DEFAULT 'text',
+                file_id INTEGER REFERENCES files(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`,
 
             `CREATE TABLE IF NOT EXISTS notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                type TEXT NOT NULL,
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                type VARCHAR(50) NOT NULL,
                 content TEXT NOT NULL,
                 is_read BOOLEAN DEFAULT FALSE,
                 related_id INTEGER,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users (id)
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`
         ];
 
         for (const tableSql of tables) {
-            await new Promise((resolve, reject) => {
-                this.db.run(tableSql, (err) => {
-                    if (err) {
-                        console.error('❌ Erro ao criar tabela:', err);
-                        reject(err);
-                    } else {
-                        resolve();
-                    }
-                });
-            });
+            try {
+                await this.pool.query(tableSql);
+            } catch (error) {
+                console.error('❌ Erro ao criar tabela:', error);
+            }
         }
 
         console.log('✅ Todas as tabelas criadas/verificadas');
@@ -127,49 +108,27 @@ class Database {
     }
 
     async createDefaultUser() {
-        const defaultUser = {
-            name: 'Admin FileFlow',
-            email: 'admin@fileflow.com',
-            password: await bcrypt.hash('123456', 10),
-            avatar: 'AF'
-        };
-
-        return new Promise((resolve, reject) => {
-            const sql = `INSERT OR IGNORE INTO users (name, email, password, avatar) VALUES (?, ?, ?, ?)`;
-            this.db.run(sql, [defaultUser.name, defaultUser.email, defaultUser.password, defaultUser.avatar], function(err) {
-                if (err) {
-                    console.error('❌ Erro ao criar usuário padrão:', err);
-                    reject(err);
-                } else {
-                    if (this.changes > 0) {
-                        console.log('✅ Usuário admin criado: admin@fileflow.com / 123456');
-                    }
-                    resolve();
-                }
-            });
-        });
+        try {
+            const hashedPassword = await bcrypt.hash('123456', 10);
+            await this.pool.query(
+                `INSERT INTO users (name, email, password, avatar) 
+                 VALUES ($1, $2, $3, $4) 
+                 ON CONFLICT (email) DO NOTHING`,
+                ['Admin FileFlow', 'admin@fileflow.com', hashedPassword, 'AF']
+            );
+            console.log('✅ Usuário admin verificado');
+        } catch (error) {
+            console.error('❌ Erro ao criar usuário padrão:', error);
+        }
     }
 
     async disconnect() {
-        return new Promise((resolve, reject) => {
-            if (this.db) {
-                this.db.close((err) => {
-                    if (err) {
-                        console.error('❌ Erro ao fechar conexão:', err);
-                        reject(err);
-                    } else {
-                        console.log('🔌 Desconectado do SQLite');
-                        resolve();
-                    }
-                });
-            } else {
-                resolve();
-            }
-        });
+        await this.pool.end();
+        console.log('🔌 Desconectado do PostgreSQL');
     }
 
     getDatabase() {
-        return this.db;
+        return this.pool;
     }
 }
 
